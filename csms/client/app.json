@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Class Schedule Management System",
+    "slug": "csms",
+    "version": "1.0.0",
+    "platforms": [
+      "web"
+    ],
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}
