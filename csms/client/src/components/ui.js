@@ -92,31 +92,131 @@ export const Muted = ({ children, style }) => (
   </Text>
 )
 
-export function Field({ label, style, ...props }) {
+export function Field({
+  label,
+  style,
+  rightAccessory,
+  ...props
+}) {
+  const input = (
+    <TextInput
+      accessibilityLabel={label}
+      placeholderTextColor="#8A94A6"
+      {...props}
+      style={[
+        FONT,
+        {
+          height: 44,
+          borderWidth: 1,
+          borderColor: '#CBD2DC',
+          borderRadius: 8,
+          paddingHorizontal: 12,
+          paddingRight: rightAccessory ? 44 : 12,
+          fontSize: 14,
+          color: C.ink,
+          backgroundColor: '#fff',
+        },
+      ]}
+    />
+  )
+
   return (
     <View style={[{ flexGrow: 1, flexBasis: 160, gap: 6 }, style]}>
       <Text style={[FONT, { fontSize: 13, fontWeight: '500', color: C.muted }]}>
         {label}
       </Text>
-      <TextInput
-        accessibilityLabel={label}
-        placeholderTextColor="#8A94A6"
-        {...props}
-        style={[
-          FONT,
-          {
-            height: 44,
-            borderWidth: 1,
-            borderColor: '#CBD2DC',
-            borderRadius: 8,
-            paddingHorizontal: 12,
-            fontSize: 14,
-            color: C.ink,
-            backgroundColor: '#fff',
-          },
-        ]}
-      />
+      {rightAccessory ? (
+        <View style={{ position: 'relative' }}>
+          {input}
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 4,
+              bottom: 0,
+              justifyContent: 'center',
+            }}
+          >
+            {rightAccessory}
+          </View>
+        </View>
+      ) : (
+        input
+      )}
     </View>
+  )
+}
+
+function VisibilityIcon({ visible }) {
+  return (
+    <View
+      style={{
+        width: 22,
+        height: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <View
+        style={{
+          width: 19,
+          height: 12,
+          borderWidth: 1.5,
+          borderColor: C.muted,
+          borderRadius: 10,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <View
+          style={{
+            width: 5,
+            height: 5,
+            borderRadius: 3,
+            backgroundColor: C.muted,
+          }}
+        />
+      </View>
+      {!visible && (
+        <View
+          style={{
+            position: 'absolute',
+            width: 24,
+            height: 1.5,
+            backgroundColor: C.muted,
+            transform: [{ rotate: '45deg' }],
+          }}
+        />
+      )}
+    </View>
+  )
+}
+
+export function PasswordField({ label = 'Password', ...props }) {
+  const [visible, setVisible] = React.useState(false)
+
+  return (
+    <Field
+      label={label}
+      {...props}
+      secureTextEntry={!visible}
+      rightAccessory={
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={visible ? 'Hide password' : 'Show password'}
+          accessibilityState={{ pressed: visible }}
+          onPress={() => setVisible((current) => !current)}
+          style={{
+            width: 36,
+            height: 36,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <VisibilityIcon visible={visible} />
+        </Pressable>
+      }
+    />
   )
 }
 

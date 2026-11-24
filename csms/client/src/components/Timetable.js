@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import { C, DAYS, FONT } from '../theme'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { formatTime12, formatTimeRange12 } from '../utils/time'
 
 const PALETTE = [
   ['#E4EBFD', '#1B3FB0'],
@@ -13,6 +14,10 @@ const colorFor = (code = '') =>
   PALETTE[[...code].reduce((a, c) => a + c.charCodeAt(0), 0) % PALETTE.length]
 const hm = (t) => String(t).slice(0, 5)
 const hourLabel = (h) => `${h > 12 ? h - 12 : h}:00 ${h >= 12 ? 'PM' : 'AM'}`
+const HOUR_HEIGHT = 64
+const HALF_HOUR_HEIGHT = HOUR_HEIGHT / 2
+const toMinutes = (time) =>
+  parseInt(time, 10) * 60 + parseInt(String(time).slice(3, 5), 10)
 
 // Today as 1 (Mon) to 6 (Sat). Sunday shows Monday.
 const todayIndex = () => {
@@ -21,7 +26,7 @@ const todayIndex = () => {
 }
 
 // Phone view: Mon to Sat buttons, then that day's classes in time order.
-function DayList({ schedules, day: dayProp, onDay, highlightId }) {
+function DayList({ schedules, day: dayProp, onDay, highlightId, formatTimes }) {
   const [own, setOwn] = useState(todayIndex())
   const day = dayProp ?? own
   const setDay = onDay || setOwn
@@ -93,7 +98,9 @@ function DayList({ schedules, day: dayProp, onDay, highlightId }) {
                 { width: 96, fontSize: 13, fontWeight: '700', color: fg },
               ]}
             >
-              {hm(s.start_time)}–{hm(s.end_time)}
+              {formatTimes
+                ? formatTimeRange12(s.start_time, s.end_time)
+                : `${hm(s.start_time)}–${hm(s.end_time)}`}
             </Text>
             <View style={{ flex: 1 }}>
               <Text
@@ -115,7 +122,7 @@ function DayList({ schedules, day: dayProp, onDay, highlightId }) {
 }
 
 // Desktop view: weekly grid, Monday to Saturday. A class sits in the row of the hour it starts.
-function Grid({ schedules, highlightId }) {
+function Grid({ schedules, highlightId, formatTimes }) {
   const hours = useMemo(() => {
     const starts = schedules.map((s) => parseInt(s.start_time, 10))
     const first = Math.min(7, ...starts)
@@ -188,7 +195,9 @@ function Grid({ schedules, highlightId }) {
                           {s.status === 'draft' ? ' (draft)' : ''}
                         </Text>
                         <Text style={[FONT, { fontSize: 11, color: fg }]}>
-                          {hm(s.start_time)}–{hm(s.end_time)}
+                          {formatTimes
+                            ? formatTimeRange12(s.start_time, s.end_time)
+                            : `${hm(s.start_time)}–${hm(s.end_time)}`}
                         </Text>
                       </View>
                     )
@@ -202,8 +211,208 @@ function Grid({ schedules, highlightId }) {
   )
 }
 
+function laneSchedules(schedules) {
+  const sorted = [...schedules].sort(
+    (a, b) => toMinutes(a.start_time) - toMinutes(b.start_time),
+  )
+  const groups = []
+  let group = []
+  let groupEnd = -1
+
+  for (const schedule of sorted) {
+    const start = toMinutes(schedule.start_time)
+    const end = toMinutes(schedule.end_time)
+    if (group.length && start >= groupEnd) {
+      groups.push(group)
+      group = []
+      groupEnd = -1
+    }
+    group.push(schedule)
+    groupEnd = Math.max(groupEnd, end)
+  }
+  if (group.length) groups.push(group)
+
+  return groups.flatMap((overlapping) => {
+    const laneEnds = []
+    const placed = overlapping.map((schedule) => {
+      const start = toMinutes(schedule.start_time)
+      const end = toMinutes(schedule.end_time)
+      let lane = laneEnds.findIndex((laneEnd) => laneEnd <= start)
+      if (lane < 0) lane = laneEnds.length
+      laneEnds[lane] = end
+      return { schedule, lane }
+    })
+    return placed.map((item) => ({
+      ...item,
+      laneCount: laneEnds.length,
+    }))
+  })
+}
+
+function DurationGrid({ schedules, highlightId }) {
+  const { hours, slots, firstHour, height } = useMemo(() => {
+    const starts = schedules.map((s) => toMinutes(s.start_time))
+    const ends = schedules.map((s) => toMinutes(s.end_time))
+    const first = Math.min(7 * 60, ...starts)
+    const last = Math.max(17 * 60, ...ends)
+    const firstHour = Math.floor(first / 60)
+    const lastHour = Math.ceil(last / 60)
+    const hours = Array.from(
+      { length: lastHour - firstHour + 1 },
+      (_, i) => firstHour + i,
+    )
+    const slots = Array.from(
+      { length: hours.length * 2 },
+      (_, i) => firstHour * 60 + i * 30,
+    )
+    return {
+      hours,
+      slots,
+      firstHour,
+      height: slots.length * HALF_HOUR_HEIGHT,
+    }
+  }, [schedules])
+
+  return (
+    <ScrollView horizontal>
+      <View style={{ minWidth: 720, flex: 1 }}>
+        <View style={{ flexDirection: 'row', gap: 6, marginBottom: 6 }}>
+          <View style={{ width: 70 }} />
+          {DAYS.map((day) => (
+            <Text
+              key={day}
+              style={[
+                FONT,
+                { flex: 1, fontSize: 12, fontWeight: '600', color: C.muted },
+              ]}
+            >
+              {day}
+            </Text>
+          ))}
+        </View>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <View style={{ width: 70 }}>
+            {slots.map((time, index) => (
+              <Text
+                key={time}
+                style={[
+                  FONT,
+                  {
+                    height: HALF_HOUR_HEIGHT,
+                    fontSize: 12,
+                    color: C.muted,
+                    transform: [
+                      {
+                        translateY:
+                          index === 0 ? 0 : -HALF_HOUR_HEIGHT / 2,
+                      },
+                    ],
+                  },
+                ]}
+              >
+                {formatTime12(
+                  `${String(Math.floor(time / 60)).padStart(2, '0')}:${String(time % 60).padStart(2, '0')}`,
+                )}
+              </Text>
+            ))}
+          </View>
+          {DAYS.map((day, index) => {
+            const daySchedules = laneSchedules(
+              schedules.filter((schedule) => schedule.day_of_week === index + 1),
+            )
+            return (
+              <View
+                key={day}
+                style={{
+                  flex: 1,
+                  height,
+                  position: 'relative',
+                  borderLeftWidth: index === 0 ? 1 : 0,
+                  borderRightWidth: 1,
+                  borderColor: '#E1E6EF',
+                }}
+              >
+                {Array.from({ length: hours.length * 2 + 1 }, (_, line) => {
+                  const hourLine = line % 2 === 0
+                  return (
+                    <View
+                      key={`grid-line-${line}`}
+                      pointerEvents="none"
+                      style={{
+                        position: 'absolute',
+                        top: line * HALF_HOUR_HEIGHT,
+                        left: 0,
+                        right: 0,
+                        borderTopWidth: 1,
+                        borderTopColor: hourLine ? '#C7D0DC' : '#D9E0E9',
+                        borderStyle: 'solid',
+                        zIndex: 2,
+                      }}
+                    />
+                  )
+                })}
+                {daySchedules.map(({ schedule, lane, laneCount }) => {
+                  const start = toMinutes(schedule.start_time)
+                  const end = toMinutes(schedule.end_time)
+                  const startSlot = (start - firstHour * 60) / 30
+                  const endSlot = (end - firstHour * 60) / 30
+                  const [bg, fg] = colorFor(schedule.subject?.code)
+                  return (
+                    <View
+                      key={schedule.id}
+                      style={{
+                        position: 'absolute',
+                        top: startSlot * HALF_HOUR_HEIGHT,
+                        left: `${(lane / laneCount) * 100}%`,
+                        width: `${100 / laneCount}%`,
+                        height: (endSlot - startSlot) * HALF_HOUR_HEIGHT,
+                        backgroundColor: bg,
+                        zIndex: 1,
+                        borderRadius: 8,
+                        padding: 8,
+                        borderWidth: 2,
+                        borderColor:
+                          schedule.id === highlightId ? C.ink : 'transparent',
+                        borderBottomWidth: 1,
+                        borderBottomColor: fg,
+                      }}
+                    >
+                      <Text
+                        style={[
+                          FONT,
+                          { fontSize: 12, fontWeight: '600', color: fg },
+                        ]}
+                      >
+                        {schedule.subject?.code}
+                      </Text>
+                      <Text style={[FONT, { fontSize: 12, color: fg }]}>
+                        {schedule.room?.name}
+                        {schedule.status === 'draft' ? ' (draft)' : ''}
+                      </Text>
+                      <Text style={[FONT, { fontSize: 11, color: fg }]}>
+                        {formatTimeRange12(schedule.start_time, schedule.end_time)}
+                      </Text>
+                    </View>
+                  )
+                })}
+              </View>
+            )
+          })}
+        </View>
+      </View>
+    </ScrollView>
+  )
+}
+
 // Same timetable for every role. Phones get the day-by-day list, larger screens the weekly grid.
-export default function Timetable({ schedules, day, onDay, highlightId }) {
+export default function Timetable({
+  schedules,
+  day,
+  onDay,
+  highlightId,
+  formatTimes = false,
+  spanDuration = false,
+}) {
   const mobile = useIsMobile()
   return mobile ? (
     <DayList
@@ -211,8 +420,17 @@ export default function Timetable({ schedules, day, onDay, highlightId }) {
       day={day}
       onDay={onDay}
       highlightId={highlightId}
+      formatTimes={formatTimes}
     />
   ) : (
-    <Grid schedules={schedules} highlightId={highlightId} />
+    spanDuration ? (
+      <DurationGrid schedules={schedules} highlightId={highlightId} />
+    ) : (
+      <Grid
+        schedules={schedules}
+        highlightId={highlightId}
+        formatTimes={formatTimes}
+      />
+    )
   )
 }

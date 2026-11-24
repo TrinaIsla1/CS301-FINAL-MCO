@@ -5,9 +5,9 @@ React Native (Expo, web) + Node.js (Express) + Supabase (PostgreSQL and email au
 
 ## Roles
 
-- **Admin:** controls the whole process: subjects, instructors, rooms, schedules, users, audit log.
+- **Admin:** manages subjects, instructors and rooms, and sees the dashboard overview.
 - **Instructor:** sees their own published weekly timetable, next class, teaching load, and recent schedule changes, and can download it as a PDF.
-- **Viewer / student:** sees the published timetable, subjects and rooms (read-only).
+- **Viewer / student:** sees their own profile and published schedules for their program and section.
 
 ## Setup
 
@@ -24,10 +24,11 @@ React Native (Expo, web) + Node.js (Express) + Supabase (PostgreSQL and email au
 
 ## What is built
 
-- CRUD, search and sort for subjects, instructors, rooms and class schedules.
+- CRUD, search and sort for subjects, instructors and rooms.
+- Admin dashboard schedule overview and conflict alerts.
 - Email sign-up with verification, sign-in and password reset (Supabase Auth).
 - Conflict detection (room, instructor, section) in the API, backed by database exclusion constraints.
-- One weekly timetable shared by all roles (Admin: everything, Instructor: own classes, Viewer: published classes).
+- Role-based schedule access (Admin: all schedules, Instructor: own classes, Viewer: published schedules for their program and section in Profile).
 - Phone layout: a three-line menu button in the top right corner holds all tabs, and the timetable becomes Mon to Sat day buttons with that day's classes.
 - Dashboard counts and conflict alerts (unavailable rooms, instructors over their hour limit), audit log, role-based access (API and Row Level Security).
 - Hooks: `useAuth`, `useResource`, `useDebounce`.

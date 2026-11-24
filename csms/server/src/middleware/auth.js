@@ -21,12 +21,15 @@ export const requireAuth = wrap(async (req, res, next) => {
     .select('role, full_name')
     .eq('id', data.user.id)
     .single();
+  const userMetadata = data.user.user_metadata || {};
 
   req.user = {
     id: data.user.id,
     email: data.user.email,
     role: profile?.role || 'viewer',
     name: profile?.full_name || '',
+    program: userMetadata.program || '',
+    section: userMetadata.section || '',
   };
   next();
 });

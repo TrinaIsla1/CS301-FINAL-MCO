@@ -21,6 +21,7 @@ const SELECT =
   '*, subject:subjects(code,name), instructor:instructors(name), room:rooms(name,building,capacity)'
 const SORTS = ['day_of_week', 'start_time', 'status', 'section', 'created_at']
 const hm = (t) => String(t).slice(0, 5)
+const normalize = (value) => String(value || '').replace(/\s/g, '').toUpperCase()
 
 // Returns every clash for a proposed schedule: same room, instructor or section at an overlapping time.
 const norm = (t) => (t && String(t).length === 5 ? `${t}:00` : t)
@@ -117,6 +118,17 @@ r.get(
     // Only admins see drafts and archived schedules.
     if (req.user.role !== 'admin') q = q.eq('status', 'published')
 
+    let viewerProgram = ''
+    let viewerSection = ''
+    if (req.user.role === 'viewer') {
+      viewerProgram = normalize(req.user.program)
+      const assignedSection =
+        typeof req.user.section === 'string' ? req.user.section.trim() : ''
+      viewerSection = normalize(assignedSection)
+      if (!viewerProgram || !viewerSection) return res.json({ data: [] })
+      q = q.eq('section', assignedSection)
+    }
+
     if (req.query.mine === 'true') {
       const { data: me } = await db
         .from('instructors')
@@ -129,7 +141,20 @@ r.get(
 
     const { data, error } = await q
     if (error) throw dbError(error)
-    res.json({ data })
+    const rows =
+      req.user.role === 'viewer'
+        ? data.filter((schedule) => {
+            const section = normalize(schedule.section)
+            // Legacy schedules identify their program in the section prefix.
+            const program = normalize(
+              schedule.program ||
+                schedule.program_name ||
+                section.slice(0, viewerProgram.length),
+            )
+            return section === viewerSection && program === viewerProgram
+          })
+        : data
+    res.json({ data: rows })
   }),
 )
 

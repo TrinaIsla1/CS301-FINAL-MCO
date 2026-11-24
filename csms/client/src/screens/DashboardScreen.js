@@ -16,8 +16,8 @@ import {
   confirmAction,
 } from '../components/ui'
 import { C, DAYS, DAY_OPTIONS, FONT } from '../theme'
+import { formatTimeRange12 } from '../utils/time'
 
-const hm = (t) => String(t).slice(0, 5)
 const VIEW_BY = [
   { value: 'all', label: 'All rooms' },
   { value: 'instructor', label: 'By instructor' },
@@ -195,7 +195,7 @@ export default function DashboardScreen({ go }) {
             : 'No schedules yet. Use “Add schedule” to create the first class.'}
         </Muted>
       ) : (
-        <Timetable schedules={viewRows} />
+        <Timetable schedules={viewRows} formatTimes spanDuration />
       )}
     </Card>
   )
@@ -227,11 +227,6 @@ export default function DashboardScreen({ go }) {
         </View>
         <Banner>{error || r.error}</Banner>
         {statCards}
-        <Btn
-          kind="primary"
-          title="+ Add schedule"
-          onPress={() => go('Schedules')}
-        />
         {timetable}
         {alertsCard}
       </View>
@@ -267,11 +262,6 @@ export default function DashboardScreen({ go }) {
           {Platform.OS === 'web' && (
             <Btn title="Export PDF" onPress={() => window.print()} />
           )}
-          <Btn
-            kind="primary"
-            title="+ Add schedule"
-            onPress={() => go('Schedules')}
-          />
         </View>
       </View>
       <Banner>{error || r.error}</Banner>
@@ -401,7 +391,7 @@ export default function DashboardScreen({ go }) {
                 `${s.subject?.code ?? ''} ${s.subject?.name ?? ''} · ${s.section}`,
                 s.instructor?.name,
                 s.room?.name,
-                `${DAYS[s.day_of_week - 1]} ${hm(s.start_time)}–${hm(s.end_time)}`,
+                `${DAYS[s.day_of_week - 1]} ${formatTimeRange12(s.start_time, s.end_time)}`,
                 s.status[0].toUpperCase() + s.status.slice(1),
               ]
               return (
@@ -432,17 +422,12 @@ export default function DashboardScreen({ go }) {
                   ))}
                   <View
                     style={{
-                      width: 170,
+                      width: 90,
                       padding: 8,
                       flexDirection: 'row',
                       gap: 8,
                     }}
                   >
-                    <Btn
-                      small
-                      title="Edit"
-                      onPress={() => go('Schedules', { edit: s })}
-                    />
                     <Btn
                       small
                       kind="danger"

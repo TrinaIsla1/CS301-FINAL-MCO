@@ -1,18 +1,118 @@
 import React, { useState } from 'react'
-import { ScrollView, View, Text } from 'react-native'
+import { Platform, Pressable, ScrollView, View, Text } from 'react-native'
 import { useAuth } from '../hooks/useAuth'
-import { Banner, Btn, Card, Field, H1, Muted } from '../components/ui'
+import {
+  Banner,
+  Btn,
+  Card,
+  Field,
+  H1,
+  Muted,
+  PasswordField,
+  Select,
+} from '../components/ui'
 import { C, FONT } from '../theme'
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const PROGRAMS = ['BSIS', 'BSCS', 'BSIT', 'BSEMC']
+const STACKED_FIELD_STYLE = { flexGrow: 0, flexBasis: 'auto' }
+
+function ProgramField({ value, onChange }) {
+  const [open, setOpen] = useState(false)
+
+  if (Platform.OS === 'web') {
+    return (
+      <Select
+        label="Program"
+        value={value}
+        onChange={onChange}
+        style={STACKED_FIELD_STYLE}
+        options={[
+          { value: '', label: 'Select a program' },
+          ...PROGRAMS,
+        ]}
+      />
+    )
+  }
+
+  return (
+    <View style={{ gap: 6 }}>
+      <Text style={[FONT, { fontSize: 13, fontWeight: '500', color: C.muted }]}>
+        Program
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Program"
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen((current) => !current)}
+        style={{
+          height: 44,
+          borderWidth: 1,
+          borderColor: '#CBD2DC',
+          borderRadius: 8,
+          paddingHorizontal: 12,
+          backgroundColor: '#fff',
+          justifyContent: 'center',
+        }}
+      >
+        <Text style={[FONT, { fontSize: 14, color: value ? C.ink : '#8A94A6' }]}>
+          {value || 'Select a program'}
+        </Text>
+      </Pressable>
+      {open && (
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: C.border,
+            borderRadius: 8,
+            backgroundColor: '#fff',
+            overflow: 'hidden',
+          }}
+        >
+          {PROGRAMS.map((program) => (
+            <Pressable
+              key={program}
+              accessibilityRole="button"
+              onPress={() => {
+                onChange(program)
+                setOpen(false)
+              }}
+              style={{
+                minHeight: 44,
+                justifyContent: 'center',
+                paddingHorizontal: 12,
+                borderBottomWidth: program === 'BSEMC' ? 0 : 1,
+                borderBottomColor: C.border,
+              }}
+            >
+              <Text style={[FONT, { fontSize: 14, color: C.ink }]}>
+                {program}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  )
+}
 
 export default function AuthScreen() {
-  const { signIn, signUp, resetPassword, verifyEmail, resendCode } = useAuth()
+  const {
+    signIn,
+    signUp,
+    resetPassword,
+    verifyEmail,
+    resendCode,
+    profileSyncError,
+    clearProfileSyncError,
+  } = useAuth()
   const [mode, setMode] = useState('login') // login | register | verify | reset
   const [form, setForm] = useState({
-    name: '',
+    fullName: '',
     email: '',
     password: '',
+    program: '',
+    section: '',
     code: '',
   })
   const [error, setError] = useState('')
@@ -23,29 +123,48 @@ export default function AuthScreen() {
   const submit = async () => {
     setError('')
     setNotice('')
+    clearProfileSyncError()
     if (!EMAIL.test(form.email)) return setError('Enter a valid email address.')
     if ((mode === 'login' || mode === 'register') && form.password.length < 8)
       return setError('Use a password with at least 8 characters.')
-    if (mode === 'register' && !form.name.trim())
+    if ((mode === 'login' || mode === 'register') && !form.fullName.trim())
       return setError('Enter your full name.')
+    if ((mode === 'login' || mode === 'register') && !form.program)
+      return setError('Select your program.')
     if (mode === 'verify' && !/^\d{6,10}$/.test(form.code.trim()))
       return setError('Enter the code from your email.')
     setBusy(true)
     try {
       if (mode === 'login') {
-        const { error: e } = await signIn(form.email, form.password)
+        const { error: e } = await signIn(form.email, form.password, {
+          full_name: form.fullName.trim(),
+          program: form.program,
+          section: form.section.trim(),
+        })
         if (e) throw e
       } else if (mode === 'register') {
         const { error: e } = await signUp(
           form.email,
           form.password,
-          form.name.trim(),
+          form.fullName.trim(),
+          {
+            program: form.program,
+            section: form.section.trim(),
+          },
         )
         if (e) throw e
         setNotice('We sent a verification code to your email.')
         setMode('verify')
       } else if (mode === 'verify') {
-        const { error: e } = await verifyEmail(form.email, form.code.trim())
+        const { error: e } = await verifyEmail(
+          form.email,
+          form.code.trim(),
+          {
+            full_name: form.fullName.trim(),
+            program: form.program,
+            section: form.section.trim(),
+          },
+        )
         if (e) throw e
         // On success Supabase signs the user in; onAuthStateChange takes over.
       } else {
@@ -93,21 +212,28 @@ export default function AuthScreen() {
         backgroundColor: C.bg,
       }}
     >
-      <Card style={{ width: '100%', maxWidth: 420, gap: 16 }}>
+      <Card
+        style={{
+          width: '100%',
+          maxWidth: 420,
+          gap: mode === 'login' || mode === 'register' ? 6 : 16,
+        }}
+      >
         <Text
           style={[FONT, { fontWeight: '700', fontSize: 17, color: C.blue }]}
         >
           CSMS
         </Text>
         <H1>{titles[mode]}</H1>
-        <Banner>{error}</Banner>
+        <Banner>{error || profileSyncError}</Banner>
         <Banner kind="ok">{notice}</Banner>
-        {mode === 'register' && (
+        {(mode === 'login' || mode === 'register') && (
           <Field
-            label="Full name"
-            value={form.name}
-            onChangeText={set('name')}
+            label="Full Name"
+            value={form.fullName}
+            onChangeText={set('fullName')}
             autoComplete="name"
+            style={STACKED_FIELD_STYLE}
           />
         )}
         <Field
@@ -118,18 +244,30 @@ export default function AuthScreen() {
           keyboardType="email-address"
           autoComplete="email"
           editable={mode !== 'verify'}
+          style={STACKED_FIELD_STYLE}
         />
         {(mode === 'login' || mode === 'register') && (
-          <Field
+          <PasswordField
             label="Password"
             value={form.password}
             onChangeText={set('password')}
-            secureTextEntry
             autoComplete={
               mode === 'login' ? 'current-password' : 'new-password'
             }
             onSubmitEditing={submit}
+            style={STACKED_FIELD_STYLE}
           />
+        )}
+        {(mode === 'login' || mode === 'register') && (
+          <>
+            <ProgramField value={form.program} onChange={set('program')} />
+            <Field
+              label="Section"
+              value={form.section}
+              onChangeText={set('section')}
+              style={STACKED_FIELD_STYLE}
+            />
+          </>
         )}
         {mode === 'verify' && (
           <Field
@@ -140,6 +278,7 @@ export default function AuthScreen() {
             maxLength={10}
             autoComplete="one-time-code"
             onSubmitEditing={submit}
+            style={STACKED_FIELD_STYLE}
           />
         )}
         <Btn

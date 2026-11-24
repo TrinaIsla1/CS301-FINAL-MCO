@@ -10,10 +10,21 @@ import { api } from '../lib/api'
 
 const AuthContext = createContext(null)
 
+async function updateUserMetadata(metadata) {
+  const { error } = await supabase.auth.updateUser({ data: metadata })
+  if (!error) return null
+
+  const { error: signOutError } = await supabase.auth.signOut()
+  return signOutError
+    ? new Error(`${error.message} Sign out failed: ${signOutError.message}`)
+    : error
+}
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [profileSyncError, setProfileSyncError] = useState('')
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -43,21 +54,58 @@ export function AuthProvider({ children }) {
       session,
       profile,
       loading,
-      signIn: (email, password) =>
-        supabase.auth.signInWithPassword({ email, password }),
-      signUp: (email, password, fullName) =>
+      profileSyncError,
+      clearProfileSyncError: () => setProfileSyncError(''),
+      signIn: async (email, password, metadata) => {
+        const result = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+        if (result.error || !metadata) return result
+
+        const error = await updateUserMetadata(metadata)
+        if (!error) {
+          setProfileSyncError('')
+          return result
+        }
+
+        setProfileSyncError(`Your profile details could not be saved: ${error.message}`)
+        return { error }
+      },
+      signUp: (email, password, fullName, metadata = {}) =>
         supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName } },
+          options: { data: { full_name: fullName, ...metadata } },
         }),
       resetPassword: (email) => supabase.auth.resetPasswordForEmail(email),
-      verifyEmail: (email, token) =>
-        supabase.auth.verifyOtp({ email, token, type: 'email' }),
+      verifyEmail: async (email, token, metadata) => {
+        const result = await supabase.auth.verifyOtp({
+          email,
+          token,
+          type: 'email',
+        })
+        if (result.error || !metadata) return result
+
+        const error = await updateUserMetadata(metadata)
+        if (error) {
+          setProfileSyncError(
+            `Your profile details could not be saved: ${error.message}`,
+          )
+          return { error }
+        }
+        setProfileSyncError('')
+        return result
+      },
       resendCode: (email) => supabase.auth.resend({ type: 'signup', email }),
       signOut: () => supabase.auth.signOut(),
     }),
-    [session, profile, loading],
+    [
+      session,
+      profile,
+      loading,
+      profileSyncError,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -12,21 +12,17 @@ import { useIsMobile } from './src/hooks/useIsMobile'
 import AuthScreen from './src/screens/AuthScreen'
 import DashboardScreen from './src/screens/DashboardScreen'
 import ResourceScreen from './src/screens/ResourceScreen'
-import SchedulesScreen from './src/screens/SchedulesScreen'
 import TimetableScreen from './src/screens/TimetableScreen'
 import AvailabilityScreen from './src/screens/AvailabilityScreen'
+import ViewerLoginScreen from './src/screens/ViewerLoginScreen'
 import SearchBox from './src/components/SearchBox'
 import Bell from './src/components/Bell'
-import {
-  AuditScreen,
-  UsersScreen,
-  ProfileScreen,
-} from './src/screens/AdminListScreens'
+import { ProfileScreen } from './src/screens/AdminListScreens'
 import * as resources from './src/config/resources'
 import { Btn } from './src/components/ui'
 import { C, FONT } from './src/theme'
 
-// Tabs per role. The Admin controls the whole scheduling process.
+// Tabs per role. Admin navigation focuses on the dashboard and core resources.
 // Each tab renders with `go` (switch tab) and `intent` (what the switch asked for).
 const TABS = {
   admin: [
@@ -64,9 +60,6 @@ const TABS = {
         />
       ),
     ],
-    ['Schedules', (go, i) => <SchedulesScreen initialEdit={i.edit} />],
-    ['Users', () => <UsersScreen />],
-    ['Audit Log', () => <AuditScreen />],
   ],
   instructor: [
     ['My Schedule', () => <TimetableScreen title="My Schedule" mine />],
@@ -74,9 +67,6 @@ const TABS = {
     ['Profile', () => <ProfileScreen />],
   ],
   viewer: [
-    ['Timetable', () => <TimetableScreen title="Class Timetable" />],
-    ['Subjects', () => <ResourceScreen config={resources.subjects} />],
-    ['Rooms', () => <ResourceScreen config={resources.rooms} />],
     ['Profile', () => <ProfileScreen />],
   ],
 }
@@ -226,8 +216,17 @@ function MenuButton({ open, onPress }) {
 }
 
 function Shell() {
-  const { session, profile, loading, signOut } = useAuth()
+  const {
+    session,
+    profile,
+    loading,
+    profileSyncError,
+    signOut,
+  } = useAuth()
   const mobile = useIsMobile()
+  const viewerEntry =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('portal') === 'viewer'
   const [tab, setTab] = useState(0)
   const [intent, setIntent] = useState({})
   const [menuOpen, setMenuOpen] = useState(false)
@@ -246,7 +245,7 @@ function Shell() {
         <ActivityIndicator color={C.blue} />
       </View>
     )
-  if (!session) return <AuthScreen />
+  if (!session) return viewerEntry ? <ViewerLoginScreen /> : <AuthScreen />
   if (!profile) {
     return (
       <View
@@ -260,6 +259,44 @@ function Shell() {
         <ActivityIndicator color={C.blue} />
         <Text style={FONT}>Loading your account…</Text>
         <Btn small title="Sign out" onPress={signOut} />
+      </View>
+    )
+  }
+  if (viewerEntry && profileSyncError) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: 12,
+          padding: 24,
+          backgroundColor: C.bg,
+        }}
+      >
+        <Text style={[FONT, { color: C.danger, textAlign: 'center' }]}>
+          {profileSyncError}
+        </Text>
+        <Btn title="Sign out" onPress={signOut} />
+      </View>
+    )
+  }
+  if (viewerEntry && profile.role !== 'viewer') {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: 12,
+          padding: 24,
+          backgroundColor: C.bg,
+        }}
+      >
+        <Text style={[FONT, { color: C.ink, textAlign: 'center' }]}>
+          This sign-in link is for Viewer accounts only.
+        </Text>
+        <Btn title="Sign out" onPress={signOut} />
       </View>
     )
   }
