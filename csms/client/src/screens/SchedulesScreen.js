@@ -20,7 +20,7 @@ const blank = {
   subject_id: '',
   instructor_id: '',
   room_id: '',
-  section: '',
+  section_id: '',
   semester: '1st Semester',
   academic_year: '',
   day_of_week: '1',
@@ -43,6 +43,7 @@ export default function SchedulesScreen({ initialEdit }) {
     subjects: [],
     instructors: [],
     rooms: [],
+    sections: [],
   })
   const [form, setForm] = useState(blank)
   const [editingId, setEditingId] = useState(null)
@@ -52,12 +53,12 @@ export default function SchedulesScreen({ initialEdit }) {
 
   useEffect(() => {
     Promise.all(
-      ['subjects', 'instructors', 'rooms'].map((n) =>
+      ['subjects', 'instructors', 'rooms', 'sections'].map((n) =>
         api.get(`/api/${n}?pageSize=200`),
       ),
     )
-      .then(([s, i, rm]) =>
-        setLists({ subjects: s.data, instructors: i.data, rooms: rm.data }),
+      .then(([s, i, rm, sec]) =>
+        setLists({ subjects: s.data, instructors: i.data, rooms: rm.data, sections: sec.data }),
       )
       .catch((e) => setError(e.message))
   }, [])
@@ -76,8 +77,8 @@ export default function SchedulesScreen({ initialEdit }) {
   const validate = () => {
     if (!form.subject_id || !form.instructor_id || !form.room_id)
       return 'Choose a subject, instructor and room.'
-    if (!form.section.trim() || !form.academic_year.trim())
-      return 'Enter the section and academic year.'
+    if (!form.section_id) return 'Choose a section.'
+    if (!form.academic_year.trim()) return 'Enter the academic year.'
     if (!TIME.test(form.start_time) || !TIME.test(form.end_time))
       return 'Enter times as HH:MM, for example 08:00.'
     if (form.end_time <= form.start_time)
@@ -211,10 +212,11 @@ export default function SchedulesScreen({ initialEdit }) {
             onChange={set('end_time')}
             options={timeOpts(form.end_time)}
           />
-          <Field
+          <Select
             label="Section"
-            value={form.section}
-            onChangeText={set('section')}
+            value={form.section_id || ''}
+            onChange={set('section_id')}
+            options={opts(lists.sections, (x) => x.section_name)}
           />
           <Select
             label="Semester"

@@ -9,7 +9,7 @@ const FIELDS = [
   'subject_id',
   'instructor_id',
   'room_id',
-  'section',
+  'section_id',
   'semester',
   'academic_year',
   'day_of_week',
@@ -21,6 +21,14 @@ const SELECT =
   '*, subject:subjects(code,name), instructor:instructors(name), room:rooms(name,building,capacity)'
 const SORTS = ['day_of_week', 'start_time', 'status', 'section', 'created_at']
 const hm = (t) => String(t).slice(0, 5)
+
+// The schedule keeps the section's name next to section_id: conflict checks use the name.
+async function withSection(body) {
+  if (!body.section_id) return body
+  const { data } = await db.from('sections').select('section_name').eq('id', body.section_id).maybeSingle()
+  if (!data) throw Object.assign(new Error('Choose a valid section.'), { status: 400 })
+  return { ...body, section: data.section_name }
+}
 
 // Returns every clash for a proposed schedule: same room, instructor or section at an overlapping time.
 const norm = (t) => (t && String(t).length === 5 ? `${t}:00` : t)
@@ -94,9 +102,16 @@ async function findConflicts(s, ignoreId) {
   return problems
 }
 
+// Admins see everything. Instructors see their own published classes. Students see the published
+// classes of their own section. Anyone else sees nothing. The scope comes from the database,
+// never from query parameters.
 r.get(
   '/',
   wrap(async (req, res) => {
+    const role = req.user.role
+    if (!['admin', 'instructor', 'student'].includes(role)) {
+      return res.status(403).json({ error: 'Your account is not linked to a student record yet.' })
+    }
     const sort = SORTS.includes(req.query.sort) ? req.query.sort : 'day_of_week'
     let q = db
       .from('schedules')
@@ -104,27 +119,23 @@ r.get(
       .order(sort, { ascending: req.query.order !== 'desc' })
       .order('start_time')
 
-    for (const key of [
-      'semester',
-      'academic_year',
-      'instructor_id',
-      'room_id',
-      'section',
-      'day_of_week',
-    ]) {
-      if (req.query[key]) q = q.eq(key, req.query[key])
-    }
-    // Only admins see drafts and archived schedules.
-    if (req.user.role !== 'admin') q = q.eq('status', 'published')
+    const filters =
+      role === 'admin'
+        ? ['semester', 'academic_year', 'instructor_id', 'room_id', 'section', 'day_of_week']
+        : ['semester', 'academic_year', 'day_of_week']
+    for (const key of filters) if (req.query[key]) q = q.eq(key, req.query[key])
 
-    if (req.query.mine === 'true') {
-      const { data: me } = await db
-        .from('instructors')
-        .select('id')
-        .eq('user_id', req.user.id)
-        .maybeSingle()
+    if (role !== 'admin') q = q.eq('status', 'published')
+
+    if (role === 'instructor') {
+      const { data: me } = await db.from('instructors').select('id').eq('user_id', req.user.id).maybeSingle()
       if (!me) return res.json({ data: [] })
       q = q.eq('instructor_id', me.id)
+    }
+    if (role === 'student') {
+      const { data: me } = await db.from('students').select('section_id').eq('profile_id', req.user.id).maybeSingle()
+      if (!me?.section_id) return res.json({ data: [] })
+      q = q.eq('section_id', me.section_id)
     }
 
     const { data, error } = await q
@@ -137,7 +148,7 @@ r.post(
   '/check-conflict',
   requireRole('admin'),
   wrap(async (req, res) => {
-    const conflicts = await findConflicts(req.body, req.body.id)
+    const conflicts = await findConflicts(await withSection(req.body), req.body.id)
     res.json({ conflicts })
   }),
 )
@@ -146,7 +157,9 @@ r.post(
   '/',
   requireRole('admin'),
   wrap(async (req, res) => {
-    const body = pick(req.body, FIELDS)
+    const body = await withSection(pick(req.body, FIELDS))
+    if (!body.section_id)
+      return res.status(400).json({ error: 'Choose a section.' })
     const conflicts = await findConflicts(body)
     if (conflicts.length)
       return res.status(409).json({ error: conflicts[0].message, conflicts })
@@ -166,7 +179,7 @@ r.put(
   '/:id',
   requireRole('admin'),
   wrap(async (req, res) => {
-    const body = pick(req.body, FIELDS)
+    const body = await withSection(pick(req.body, FIELDS))
     const { data: before } = await db
       .from('schedules')
       .select('*')

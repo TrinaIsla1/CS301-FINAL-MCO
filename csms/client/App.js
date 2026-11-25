@@ -15,6 +15,10 @@ import ResourceScreen from './src/screens/ResourceScreen'
 import SchedulesScreen from './src/screens/SchedulesScreen'
 import TimetableScreen from './src/screens/TimetableScreen'
 import AvailabilityScreen from './src/screens/AvailabilityScreen'
+import StudentsScreen from './src/screens/StudentsScreen'
+import StudentScheduleScreen from './src/screens/StudentScheduleScreen'
+import ClaimScreen from './src/screens/ClaimScreen'
+import SetPasswordScreen from './src/screens/SetPasswordScreen'
 import SearchBox from './src/components/SearchBox'
 import Bell from './src/components/Bell'
 import {
@@ -31,6 +35,18 @@ import { C, FONT } from './src/theme'
 const TABS = {
   admin: [
     ['Dashboard', (go) => <DashboardScreen go={go} />],
+    ['Students', () => <StudentsScreen />],
+    [
+      'Sections',
+      (go, i) => (
+        <ResourceScreen
+          config={resources.sections}
+          canEdit
+          autoAdd={i.add}
+          autoSearch={i.search}
+        />
+      ),
+    ],
     [
       'Subjects',
       (go, i) => (
@@ -73,10 +89,14 @@ const TABS = {
     ['My Availability', () => <AvailabilityScreen />],
     ['Profile', () => <ProfileScreen />],
   ],
+  // A verified student sees only their own schedule.
+  student: [
+    ['My Schedule', () => <StudentScheduleScreen />],
+    ['Profile', () => <ProfileScreen />],
+  ],
+  // A verified account not linked to a student record yet: no schedule data at all.
   viewer: [
-    ['Timetable', () => <TimetableScreen title="Class Timetable" />],
-    ['Subjects', () => <ResourceScreen config={resources.subjects} />],
-    ['Rooms', () => <ResourceScreen config={resources.rooms} />],
+    ['Link student record', () => <ClaimScreen />],
     ['Profile', () => <ProfileScreen />],
   ],
 }
@@ -126,7 +146,7 @@ function Brand({ role, admin }) {
         {!admin && (
           <Text style={{ fontSize: 13, fontWeight: '500', color: C.muted }}>
             {' '}
-            {role[0].toUpperCase() + role.slice(1)}
+            {role === 'viewer' ? 'Account' : role[0].toUpperCase() + role.slice(1)}
           </Text>
         )}
       </Text>
@@ -226,7 +246,7 @@ function MenuButton({ open, onPress }) {
 }
 
 function Shell() {
-  const { session, profile, loading, signOut } = useAuth()
+  const { session, profile, loading, signOut, needsPassword } = useAuth()
   const mobile = useIsMobile()
   const [tab, setTab] = useState(0)
   const [intent, setIntent] = useState({})
@@ -247,6 +267,7 @@ function Shell() {
       </View>
     )
   if (!session) return <AuthScreen />
+  if (needsPassword) return <SetPasswordScreen />
   if (!profile) {
     return (
       <View

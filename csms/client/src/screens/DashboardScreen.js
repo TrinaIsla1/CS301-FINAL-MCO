@@ -56,6 +56,7 @@ export default function DashboardScreen({ go }) {
     ? `${first.semester} · ${first.academic_year}`
     : 'No schedules yet'
   const cards = [
+    ['Students', 'students'],
     ['Subjects', 'subjects'],
     ['Instructors', 'instructors'],
     ['Rooms', 'rooms'],

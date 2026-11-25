@@ -8,21 +8,29 @@ import schedules from './routes/schedules.js'
 import users from './routes/users.js'
 import availability from './routes/availability.js'
 import importer from './routes/importer.js'
+import students from './routes/students.js'
+import { publicRouter, claimStudent } from './routes/account.js'
 
 const app = express()
 app.use(cors({ origin: process.env.CLIENT_ORIGIN?.split(',') || true }))
-app.use(express.json())
+app.use(express.json({ limit: '1mb' }))
+// Behind a reverse proxy, set TRUST_PROXY=1 so rate limits see the visitor's IP.
+if (Number(process.env.TRUST_PROXY)) app.set('trust proxy', Number(process.env.TRUST_PROXY))
 
 app.get('/health', (_req, res) => res.json({ ok: true }))
+
+// Reachable without an account (rate limited): the student registration pre-check.
+app.use('/public', publicRouter)
 
 // Everything below requires a signed-in, email-verified user.
 app.use('/api', requireAuth)
 
-// Current user, plus the instructor record when this login is linked to one.
+// Current user, plus the instructor or student record this login is linked to.
 app.get(
   '/api/me',
   wrap(async (req, res) => {
     let instructor = null
+    let student = null
     if (req.user.role === 'instructor') {
       const { data } = await db
         .from('instructors')
@@ -31,7 +39,15 @@ app.get(
         .maybeSingle()
       instructor = data
     }
-    res.json({ data: { ...req.user, instructor } })
+    if (req.user.role === 'student') {
+      const { data } = await db
+        .from('students')
+        .select('id,student_number,full_name,course,year_level,section_id,section:sections(id,section_name)')
+        .eq('profile_id', req.user.id)
+        .maybeSingle()
+      student = data
+    }
+    res.json({ data: { ...req.user, instructor, student } })
   }),
 )
 
@@ -77,15 +93,19 @@ app.get(
   }),
 )
 
+// A signed-in, email-verified account links itself to its roster record.
+app.post('/api/me/claim-student', ...claimStudent)
+
 app.get(
   '/api/stats',
+  requireRole('admin'),
   wrap(async (_req, res) => {
     const count = async (t) =>
       (await db.from(t).select('*', { count: 'exact', head: true })).count ?? 0
-    const [subjects, instructors, rooms, schedules] = await Promise.all(
-      ['subjects', 'instructors', 'rooms', 'schedules'].map(count),
+    const [subjects, instructors, rooms, schedules, students] = await Promise.all(
+      ['subjects', 'instructors', 'rooms', 'schedules', 'students'].map(count),
     )
-    res.json({ data: { subjects, instructors, rooms, schedules } })
+    res.json({ data: { subjects, instructors, rooms, schedules, students } })
   }),
 )
 
@@ -109,8 +129,9 @@ app.use(
       'employment_type',
       'max_load_hours',
       'user_id',
+      'employee_number',
     ],
-    searchCols: ['name', 'email', 'department'],
+    searchCols: ['name', 'email', 'department', 'employee_number'],
     sortCols: ['name', 'department', 'max_load_hours', 'created_at'],
     defaultSort: 'name',
   }),
@@ -126,6 +147,17 @@ app.use(
   }),
 )
 
+app.use(
+  '/api/sections',
+  crudRouter('sections', {
+    fields: ['section_name', 'course', 'year_level'],
+    searchCols: ['section_name', 'course'],
+    sortCols: ['section_name', 'course', 'year_level', 'created_at'],
+    defaultSort: 'section_name',
+  }),
+)
+
+app.use('/api/students', students)
 app.use('/api/schedules', schedules)
 app.use('/api/users', users)
 app.use('/api/availability', availability)

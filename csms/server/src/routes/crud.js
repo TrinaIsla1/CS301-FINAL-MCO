@@ -5,11 +5,11 @@ import { logAudit } from '../audit.js';
 import { dbError, pick } from '../errors.js';
 
 // Generic CRUD router with sort, search and pagination.
-// Anyone signed in can read; only admins can create, update or delete.
-export function crudRouter(table, { fields, searchCols = [], sortCols = [], defaultSort = 'created_at' }) {
+// Reading is limited to readRoles (admins by default); only admins can create, update or delete.
+export function crudRouter(table, { fields, searchCols = [], sortCols = [], defaultSort = 'created_at', readRoles = ['admin'] }) {
   const r = Router();
 
-  r.get('/', wrap(async (req, res) => {
+  r.get('/', requireRole(...readRoles), wrap(async (req, res) => {
     const sort = sortCols.includes(req.query.sort) ? req.query.sort : defaultSort;
     const ascending = req.query.order !== 'desc';
     const page = Math.max(parseInt(req.query.page || '1', 10), 1);
